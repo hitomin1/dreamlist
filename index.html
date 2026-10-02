@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>夢リスト100</title>
-<meta name="description" content="叶えたい夢を100個書いて、叶うたびに夜空に星を灯していく夢リスト">
+<title>夢リスト</title>
+<meta name="description" content="叶えたい夢を書いて、叶うたびに夜空に星を灯していく夢リスト">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kaisei+Decol:wght@500;700&family=Zen+Maru+Gothic:wght@400;500;700&display=swap">
@@ -153,6 +153,16 @@ select{border:1px solid var(--line);background:var(--bg);border-radius:10px;padd
 .sheet input{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:10px 12px;font-size:16px}
 .sheet p{margin:0;font-size:13px;color:var(--muted)}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 16px;border-radius:999px;font-size:13px;z-index:20;max-width:calc(100% - 32px)}
+.setrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-block:10px;border-bottom:1px solid var(--line)}
+.setrow:last-of-type{border-bottom:0}
+.setrow .lbl{display:flex;flex-direction:column;min-width:0}
+.setrow .lbl small{color:var(--muted);font-size:12px}
+.switch{appearance:none;-webkit-appearance:none;width:46px;height:26px;border-radius:13px;background:var(--line);position:relative;cursor:pointer;flex:none;transition:background .2s}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:left .2s}
+.switch:checked{background:var(--accent)}
+.switch:checked::after{left:23px}
+input[type=range]{accent-color:var(--accent);width:140px;max-width:45vw}
+.setbtn{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:4px 12px;font-size:12px;color:var(--muted);align-self:flex-start}
 [hidden]{display:none!important}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -163,10 +173,10 @@ select{border:1px solid var(--line);background:var(--bg);border-radius:10px;padd
   <header class="sky">
     <canvas id="sky" aria-hidden="true"></canvas>
     <div class="sky-inner">
-      <div class="eyebrow">DREAM LIST 100</div>
+      <div class="eyebrow">DREAM LIST</div>
       <h1>夢リスト</h1>
       <p class="tagline">書いた夢がひとつ叶うたびに、夜空に星がひとつ灯ります</p>
-      <div class="count"><b id="doneN">0</b><span>/ 100 の夢が叶いました</span></div>
+      <div class="count"><b id="doneN">0</b><span>/ <span id="totalN">0</span> の夢が叶いました</span></div>
       <div class="bar"><i id="bar"></i></div>
     </div>
   </header>
@@ -200,6 +210,7 @@ select{border:1px solid var(--line);background:var(--bg);border-radius:10px;padd
 
   <footer class="foot">
     <div class="themes" id="themes"></div>
+    <button class="setbtn" id="openSettings">⚙ 演出と音の設定</button>
     <div id="status"></div>
   </footer>
 </div>
@@ -212,6 +223,19 @@ select{border:1px solid var(--line);background:var(--bg);border-radius:10px;padd
     <div class="row"><button type="button" class="linkbtn" id="nameCancel">あとで</button><button class="primary" type="submit">決定</button></div>
   </form>
 </div>
+<div class="sheet" id="setSheet" hidden>
+  <div class="box" role="dialog" aria-labelledby="setTitle">
+    <h2 id="setTitle">演出と音の設定</h2>
+    <p>この端末だけの設定です。</p>
+    <div>
+      <label class="setrow"><span class="lbl">効果音<small>夢を書いたとき、叶えたときに鳴ります</small></span><input type="checkbox" class="switch" id="setSound"></label>
+      <label class="setrow"><span class="lbl">音量</span><input type="range" id="setVol" oninput="settings.vol=+this.value;saveSettings()" min="0" max="1" step="0.05"></label>
+      <label class="setrow"><span class="lbl">流れ星<small>夢を書くと夜空に流れ星が流れます</small></span><input type="checkbox" class="switch" id="setShoot"></label>
+      <label class="setrow"><span class="lbl">叶ったときのキラキラ<small>星が灯るときに光の粒が広がります</small></span><input type="checkbox" class="switch" id="setBurst"></label>
+    </div>
+    <div class="row"><button type="button" class="linkbtn" id="testSfx">音を試す</button><button type="button" class="primary" id="closeSettings">閉じる</button></div>
+  </div>
+</div>
 <div class="toast" id="toast" hidden></div>
 
 <script>
@@ -219,7 +243,7 @@ select{border:1px solid var(--line);background:var(--bg);border-radius:10px;padd
 var sky=(function(){
   const c=document.getElementById("sky"), ctx=c.getContext("2d");
   const still=matchMedia("(prefers-reduced-motion: reduce)").matches;
-  let dreams=[], dust=[], W=0, H=0, raf=0, born={};
+  let dreams=[], dust=[], W=0, H=0, raf=0, born={}, shooters=[], sparks=[];
   function hash(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return (h>>>0)/4294967295}
   function size(){ const r=c.getBoundingClientRect(), dpr=Math.min(2,devicePixelRatio||1);
     W=r.width;H=r.height;c.width=W*dpr;c.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
@@ -241,7 +265,23 @@ var sky=(function(){
         star(x,y,(2.2+2*hash(d.id+"s"))*(.3+.7*k)*(1+(1-k)*1.5),tw*k);
       } else { ctx.fillStyle="rgba(255,255,255,.35)"; ctx.beginPath(); ctx.arc(x,y,1.1,0,7); ctx.fill(); }
     });
+    shooters=shooters.filter(s=>{ const k=(now-s.t)/s.d; if(k>1) return false; if(k<0) return true;
+      const e=1-Math.pow(1-k,2), x=s.x0+(s.x1-s.x0)*e, y=s.y0+(s.y1-s.y0)*e, a=Math.sin(Math.PI*k);
+      const tx=x-(s.x1-s.x0)*.22, ty=y-(s.y1-s.y0)*.22, g=ctx.createLinearGradient(tx,ty,x,y);
+      g.addColorStop(0,"rgba(255,250,230,0)"); g.addColorStop(1,`rgba(255,250,230,${a})`);
+      ctx.strokeStyle=g; ctx.lineWidth=2.2; ctx.lineCap="round"; ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(x,y); ctx.stroke();
+      star(x,y,1.8,a); return true; });
+    sparks=sparks.filter(p=>{ const k=(now-p.t)/p.d; if(k>1) return false;
+      const x=p.x+p.vx*k, y=p.y+p.vy*k+18*k*k;
+      ctx.fillStyle=`hsla(${p.h},100%,85%,${1-k})`; ctx.beginPath(); ctx.arc(x,y,p.r*(1-k*.6),0,7); ctx.fill(); return true; });
   }
+  function pos(id){ return [W*(.46+.5*hash(id+"x")), H*(.34+.4*hash(id+"y"))]; }
+  function shoot(){ if(still) return; const now=performance.now();
+    for(let i=0;i<2;i++){ const x0=W*(.72+.25*Math.random()), y0=H*(.02+.18*Math.random());
+      shooters.push({x0,y0,x1:x0-W*(.5+.15*Math.random()),y1:y0+H*(.4+.15*Math.random()),t:now+i*260,d:1100+Math.random()*300}); } }
+  function burst(id){ if(still) return; const [x,y]=pos(id), now=performance.now();
+    for(let i=0;i<34;i++){ const a=Math.random()*Math.PI*2, v=30+Math.random()*60;
+      sparks.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,r:1+Math.random()*1.8,h:35+Math.random()*30,t:now,d:900+Math.random()*600}); } }
   function loop(t){ draw(t); raf=requestAnimationFrame(loop); }
   function update(list){
     const prev=new Set(dreams.filter(d=>d.done).map(d=>d.id));
@@ -251,7 +291,7 @@ var sky=(function(){
   }
   addEventListener("resize",()=>{size();draw(performance.now())});
   size(); if(still) draw(0); else raf=requestAnimationFrame(loop);
-  return {update,draw:()=>draw(performance.now())};
+  return {update,shoot,burst,draw:()=>draw(performance.now())};
 })();
 </script>
 <script>
@@ -259,7 +299,7 @@ const GENRES=["仕事・学び","健康・美容","旅行","趣味・遊び","�
 const TERMS=[{k:"1y",l:"1年以内"},{k:"3y",l:"3年以内"},{k:"10y",l:"10年以内"},{k:"someday",l:"いつか"}];
 const THEMES=[{k:"asahi",l:"朝日"},{k:"shinryoku",l:"新緑"},{k:"yuyake",l:"夕焼け"},{k:"sakura",l:"桜"},{k:"aozora",l:"青空"}];
 const SUGGEST=["富士山に登る","海外でミュージカルを観る","資格をひとつ取る","家族旅行に行く","フルマラソンを走る","本を出版する"];
-const MAX=100;
+const MAX=1000;
 const termLabel=k=>(TERMS.find(t=>t.k===k)||TERMS[3]).l;
 const termIdx=k=>Math.max(0,TERMS.findIndex(t=>t.k===k));
 const $=id=>document.getElementById(id);
@@ -307,14 +347,15 @@ function save(){
 function newId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
 function addDream(text,genre,term,secret){
   text=text.trim(); if(!text) return;
-  if(me.dreams.length>=MAX){toast("夢は100個までです");return}
+  if(me.dreams.length>=MAX){toast("夢は1000個までです");return}
   me.dreams.push({id:newId(),text,genre,term,secret,done:false,doneAt:0,createdAt:Date.now()});
+  sfx.add(); if(settings.shoot) sky.shoot();
   save();
 }
 function toggleDone(id){
   const d=me.dreams.find(x=>x.id===id); if(!d) return;
   d.done=!d.done; d.doneAt=d.done?Date.now():0;
-  if(d.done){ toast("おめでとう！ 星がひとつ灯りました"); }
+  if(d.done){ toast("おめでとう！ 星がひとつ灯りました"); sfx.done(); if(settings.burst) sky.burst(d.id); } else sfx.undo();
   save();
 }
 function removeDream(id){ me.dreams=me.dreams.filter(x=>x.id!==id); ui.confirmDel=null; save(); }
@@ -361,7 +402,7 @@ function itemHTML(d,n){
 function renderMine(){
   const box=$("mineBody");
   if(mode==="cloud" && !fbUser){
-    box.innerHTML=`<div class="empty"><div class="big">あなたの夢を、星にしよう</div>Googleでログインすると、夢を100個まで書けます。<br>スマホでもパソコンでも同じリストが見られます。</div>`; return;
+    box.innerHTML=`<div class="empty"><div class="big">あなたの夢を、星にしよう</div>Googleでログインすると、好きなだけ夢を書けます。<br>スマホでもパソコンでも同じリストが見られます。</div>`; return;
   }
   if(!canEditMine()){ box.innerHTML=`<div class="empty">読み込み中…</div>`; return; }
   const full=me.dreams.length>=MAX;
@@ -431,11 +472,29 @@ function cloudStatus(){ return "クラウド保存中 · どの端末からで�
 function setStatus(t){ $("status").textContent=t; }
 function render(){
   const done=me.dreams.filter(d=>d.done).length;
-  $("doneN").textContent=done; $("bar").style.width=(done/MAX*100)+"%";
+  $("doneN").textContent=done; $("totalN").textContent=me.dreams.length; $("bar").style.width=(me.dreams.length?done/me.dreams.length*100:0)+"%";
   ["mine","all","rank"].forEach(t=>{ $("p-"+t).hidden=ui.tab!==t; $("t-"+t).setAttribute("aria-selected",ui.tab===t); });
   renderAccount(); renderMine(); renderAll(); renderRank(); renderThemes();
   sky.update(me.dreams);
 }
+/* ---------- settings & sound ---------- */
+const settings=Object.assign({sound:true,vol:.6,shoot:true,burst:true},(()=>{try{return JSON.parse(ls.get("dl.settings")||"{}")}catch(e){return {}}})());
+function saveSettings(){ ls.set("dl.settings",JSON.stringify(settings)); }
+const sfx=(()=>{ let ac=null;
+  function ctx(){ if(!ac){ const A=window.AudioContext||window.webkitAudioContext; if(!A) return null; ac=new A(); } if(ac.state==="suspended") ac.resume(); return ac; }
+  function tone(f,at,dur,vol,type){ const c=ctx(); if(!c) return; const t=c.currentTime+at, o=c.createOscillator(), g=c.createGain();
+    o.type=type||"sine"; o.frequency.setValueAtTime(f,t); g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(Math.max(vol,0.0002),t+0.015); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g); g.connect(c.destination); o.start(t); o.stop(t+dur+0.05); }
+  const on=()=>settings.sound&&settings.vol>0, v=()=>settings.vol;
+  return {
+    add(){ if(!on()) return; [1567.98,2093,2637].forEach((f,i)=>tone(f,i*0.08,0.8,0.10*v(),"triangle")); tone(3135.96,0.3,1.2,0.05*v()); },
+    done(){ if(!on()) return; [523.25,659.25,783.99,1046.5].forEach((f,i)=>tone(f,i*0.1,1.6,0.13*v(),"sine"));
+      [2093,2637,3135.96,4186].forEach((f,i)=>tone(f,0.45+i*0.06,0.9,0.05*v(),"triangle")); },
+    undo(){ if(!on()) return; tone(659.25,0,0.25,0.06*v(),"sine"); tone(523.25,0.08,0.3,0.05*v(),"sine"); }
+  };
+})();
+function openSettings(){ $("setSound").checked=settings.sound; $("setVol").value=settings.vol; $("setShoot").checked=settings.shoot; $("setBurst").checked=settings.burst; $("setSheet").hidden=false; }
+
 let toastT; function toast(m){ const t=$("toast"); t.textContent=m; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true,2400); }
 
 /* ---------- events ---------- */
@@ -449,6 +508,9 @@ document.addEventListener("click",e=>{
   if(b.id==="logoutBtn") return auth.signOut();
   if(b.id==="renameBtn") return openName();
   if(b.id==="nameCancel"){ $("nameSheet").hidden=true; return; }
+  if(b.id==="openSettings"){ openSettings(); return; }
+  if(b.id==="closeSettings"){ $("setSheet").hidden=true; return; }
+  if(b.id==="testSfx"){ const s=settings.sound; settings.sound=true; sfx.done(); settings.sound=s; if(settings.shoot) sky.shoot(); return; }
   const id=b.dataset.id;
   switch(b.dataset.act){
     case "toggle": toggleDone(id); break;
@@ -469,6 +531,9 @@ document.addEventListener("submit",e=>{
 });
 document.addEventListener("change",e=>{
   const t=e.target;
+  if(t.id==="setSound"){settings.sound=t.checked;saveSettings()}
+  if(t.id==="setShoot"){settings.shoot=t.checked;saveSettings()}
+  if(t.id==="setBurst"){settings.burst=t.checked;saveSettings()}
   if(t.id==="sortSel"){ui.sort=t.value;ls.set("dl.sort",t.value);renderMine()}
   if(t.id==="termSel"){ui.term=t.value;ls.set("dl.term",t.value);renderMine()}
   if(t.id==="groupSel"){ui.group=t.value;ls.set("dl.group",t.value);renderMine()}
