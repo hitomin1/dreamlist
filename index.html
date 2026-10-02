@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>夢星リスト100</title>
+<meta name="description" content="叶えたい夢を100個書いて、叶うたびに夜空に星を灯していく夢リスト">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kaisei+Decol:wght@500;700&family=Zen+Maru+Gothic:wght@400;500;700&display=swap">
+<script>
+/* ============================================================
+   ★ ここに Firebase の設定を貼り付けてください（手順書の STEP 4）
+   ============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyBZ3UWOyM_7xdwk6Jo5ipYgXnrxfNXFloI",
+  authDomain: "yumeboshi-list.firebaseapp.com",
+  projectId: "yumeboshi-list",
+  storageBucket: "yumeboshi-list.firebasestorage.app",
+  messagingSenderId: "723032995894",
+  appId: "1:723032995894:web:b7779e2006fc777855c097"
+};
+</script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+/* Layout: one centered column; a night-sky header that fills with stars, tabs, then the list. */
+:root{
+  --bg:#f3f2f8; --card:#ffffff; --fg:#24223a; --muted:#6a6782; --line:#e1dfeb; --chip:#efedf6;
+  --ok:#2f8f62; --danger:#c2413b;
+  --font-display:"Kaisei Decol","Hiragino Mincho ProN","Yu Mincho",serif;
+  --font-body:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Hiragino Sans","Meiryo",sans-serif;
+  /* palette (overridden per theme) */
+  --acc-l:#d9692c; --acc-d:#ff9a5c; --sky-a:#1d2350; --sky-b:#6b3b6e; --sky-c:#e9876a;
+  --accent:var(--acc-l);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{ --bg:#121120; --card:#1c1a2c; --fg:#ecebf6; --muted:#a29fba; --line:#2f2c44; --chip:#27243a;
+    --ok:#5cc996; --danger:#ff7a72; --accent:var(--acc-d); color-scheme:dark; }
+}
+.app[data-palette="asahi"]{ --acc-l:#d9692c; --acc-d:#ff9a5c; --sky-a:#1d2350; --sky-b:#6b3b6e; --sky-c:#e9876a; }
+.app[data-palette="shinryoku"]{ --acc-l:#2f8a55; --acc-d:#6fd49a; --sky-a:#0f2430; --sky-b:#1d4a44; --sky-c:#5f9a6a; }
+.app[data-palette="yuyake"]{ --acc-l:#c4472f; --acc-d:#ff8064; --sky-a:#1a1838; --sky-b:#5b2747; --sky-c:#d4573b; }
+.app[data-palette="sakura"]{ --acc-l:#c2457a; --acc-d:#ff8fbd; --sky-a:#251a3d; --sky-b:#6a3667; --sky-c:#d98aa8; }
+.app[data-palette="aozora"]{ --acc-l:#2b6cc4; --acc-d:#7fb2ff; --sky-a:#0b1838; --sky-b:#1d3f7a; --sky-c:#4f8fd0; }
+@media (prefers-color-scheme:dark){ .app{ --accent:var(--acc-d); } }
+@media (prefers-color-scheme:light){ .app{ --accent:var(--acc-l); } }
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:15px;line-height:1.7;
+  padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+.app{max-width:720px;margin:0 auto;padding-inline:16px;padding-block:16px 48px;display:flex;flex-direction:column;gap:16px}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* sky */
+.sky{position:relative;border-radius:20px;overflow:hidden;color:#fff;min-height:250px;
+  background:linear-gradient(170deg,var(--sky-a) 0%,var(--sky-b) 62%,var(--sky-c) 100%)}
+.sky canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.sky-inner{position:relative;padding:22px 22px 20px;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.eyebrow{font-size:11px;letter-spacing:.28em;opacity:.8}
+.sky h1{font-family:var(--font-display);font-weight:700;font-size:clamp(28px,7vw,40px);line-height:1.2;margin:0;text-wrap:balance}
+.tagline{margin:0;font-size:13px;opacity:.88}
+.count{margin-top:auto;padding-top:46px;display:flex;align-items:baseline;gap:6px;font-variant-numeric:tabular-nums}
+.count b{font-family:var(--font-display);font-size:44px;line-height:1}
+.count span{font-size:14px;opacity:.9}
+.bar{height:6px;border-radius:3px;background:rgba(255,255,255,.22);overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:#fff8d6;border-radius:3px;transition:width .6s ease}
+
+/* account row */
+.account{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:13px;color:var(--muted)}
+.account .who{flex:1;min-width:0}
+.account .who strong{color:var(--fg)}
+.linkbtn{background:none;border:0;padding:4px 2px;color:var(--accent);text-decoration:underline;text-underline-offset:3px;font-size:13px}
+
+/* tabs */
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);background:var(--chip);border-radius:12px;padding:4px;gap:4px}
+.tabs button{border:0;background:none;border-radius:9px;padding:9px 4px;font-weight:500;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--card);color:var(--fg);box-shadow:0 1px 3px rgba(20,16,40,.12)}
+
+.notice{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:12px 14px;font-size:13px}
+.notice strong{color:var(--accent)}
+
+/* form */
+.add{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.add input[type=text]{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:11px 12px;font-size:16px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+select{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 10px;font-size:14px;max-width:100%}
+.check{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.primary{border:0;background:var(--accent);color:var(--card);border-radius:10px;padding:9px 18px;font-weight:700;margin-left:auto}
+.primary:disabled{opacity:.45;cursor:not-allowed}
+.suggest{display:flex;flex-wrap:wrap;gap:6px}
+.suggest button{border:1px dashed var(--line);background:none;border-radius:999px;padding:3px 11px;font-size:12px;color:var(--muted)}
+
+/* controls */
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12px;color:var(--muted)}
+.controls label{display:flex;align-items:center;gap:6px}
+
+/* list */
+.group-title{font-family:var(--font-display);font-size:15px;margin:10px 2px 2px;color:var(--muted)}
+.list{display:flex;flex-direction:column;gap:8px}
+.item{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:11px 12px;display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:start}
+.item .num{grid-column:1;width:30px;height:30px;border-radius:50%;border:2px solid var(--line);background:none;display:grid;place-items:center;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;padding:0}
+.item.done .num{background:var(--accent);border-color:var(--accent);color:var(--card)}
+.item .body{min-width:0}
+.item .text{word-break:break-word}
+.item.done .text{color:var(--muted)}
+.meta{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}
+.chip{font-size:11px;background:var(--chip);border-radius:999px;padding:1px 9px;color:var(--muted)}
+.chip.star{color:var(--accent)}
+.actions{display:flex;gap:2px}
+.icon{border:0;background:none;color:var(--muted);font-size:12px;padding:4px 6px;border-radius:6px}
+.icon:hover{background:var(--chip)}
+.icon.danger{color:var(--danger)}
+.edit{display:flex;flex-direction:column;gap:8px}
+.edit input{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px;font-size:16px}
+.empty{text-align:center;color:var(--muted);padding:28px 12px;background:var(--card);border:1px dashed var(--line);border-radius:16px}
+.empty .big{font-family:var(--font-display);font-size:18px;color:var(--fg);margin-bottom:4px}
+
+/* everyone */
+.filter{display:flex;gap:6px;flex-wrap:wrap}
+.filter button{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:4px 13px;font-size:13px;color:var(--muted)}
+.filter button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:700}
+.feed .item{grid-template-columns:auto 1fr}
+.owner{font-size:12px;color:var(--muted)}
+.dot{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:14px;background:var(--chip);color:var(--muted)}
+.done .dot{background:var(--accent);color:var(--card)}
+
+/* ranking */
+.rank{display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 14px}
+.rank .pos{font-family:var(--font-display);font-size:20px;text-align:center;color:var(--muted);font-variant-numeric:tabular-nums}
+.rank.top .pos{color:var(--accent)}
+.rank .name{min-width:0;overflow-wrap:anywhere}
+.rank .you{font-size:11px;background:var(--accent);color:var(--card);border-radius:999px;padding:0 7px;margin-left:6px}
+.rank .score{font-variant-numeric:tabular-nums;font-size:13px;color:var(--muted);text-align:right}
+.rank .score b{font-size:18px;color:var(--fg)}
+
+/* footer */
+.foot{display:flex;flex-direction:column;gap:10px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px}
+.themes{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.swatch{border:2px solid transparent;border-radius:999px;padding:3px 10px 3px 4px;display:flex;align-items:center;gap:6px;background:var(--card);font-size:12px}
+.swatch i{width:18px;height:18px;border-radius:50%;display:block}
+.swatch[aria-pressed="true"]{border-color:var(--accent);color:var(--fg)}
+
+/* dialog */
+.sheet{position:fixed;inset:0;background:rgba(10,8,24,.5);display:grid;place-items:center;padding:16px;z-index:10}
+.sheet .box{background:var(--card);border-radius:16px;padding:20px;max-width:380px;width:100%;display:flex;flex-direction:column;gap:12px}
+.sheet h2{font-family:var(--font-display);font-size:19px;margin:0}
+.sheet input{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:10px 12px;font-size:16px}
+.sheet p{margin:0;font-size:13px;color:var(--muted)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 16px;border-radius:999px;font-size:13px;z-index:20;max-width:calc(100% - 32px)}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app" id="app" data-palette="asahi">
+
+  <header class="sky">
+    <canvas id="sky" aria-hidden="true"></canvas>
+    <div class="sky-inner">
+      <div class="eyebrow">DREAM LIST 100</div>
+      <h1>夢星リスト</h1>
+      <p class="tagline">書いた夢がひとつ叶うたびに、夜空に星がひとつ灯ります</p>
+      <div class="count"><b id="doneN">0</b><span>/ 100 の夢が叶いました</span></div>
+      <div class="bar"><i id="bar"></i></div>
+    </div>
+  </header>
+
+  <div class="account" id="account"></div>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" id="t-mine" aria-selected="true" data-tab="mine">わたしの夢</button>
+    <button role="tab" id="t-all" aria-selected="false" data-tab="all">みんなの夢</button>
+    <button role="tab" id="t-rank" aria-selected="false" data-tab="rank">ランキング</button>
+  </nav>
+
+  <div class="notice" id="notice" hidden></div>
+
+  <section id="p-mine">
+    <div id="mineBody"></div>
+  </section>
+
+  <section id="p-all" hidden>
+    <div class="filter" id="allFilter">
+      <button data-f="all" aria-pressed="true">すべて</button>
+      <button data-f="done" aria-pressed="false">叶った夢</button>
+      <button data-f="open" aria-pressed="false">挑戦中</button>
+    </div>
+    <div class="list feed" id="allList" style="margin-top:12px"></div>
+  </section>
+
+  <section id="p-rank" hidden>
+    <div class="list" id="rankList"></div>
+  </section>
+
+  <footer class="foot">
+    <div class="themes" id="themes"></div>
+    <div id="status"></div>
+  </footer>
+</div>
+
+<div class="sheet" id="nameSheet" hidden>
+  <form class="box" id="nameForm">
+    <h2>ニックネーム</h2>
+    <p>「みんなの夢」とランキングに表示される名前です。本名でなくて大丈夫です。</p>
+    <input id="nameInput" maxlength="20" placeholder="例：みそら" required>
+    <div class="row"><button type="button" class="linkbtn" id="nameCancel">あとで</button><button class="primary" type="submit">決定</button></div>
+  </form>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+/* ---------- night sky: every achieved dream becomes a star ---------- */
+var sky=(function(){
+  const c=document.getElementById("sky"), ctx=c.getContext("2d");
+  const still=matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let dreams=[], dust=[], W=0, H=0, raf=0, born={};
+  function hash(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return (h>>>0)/4294967295}
+  function size(){ const r=c.getBoundingClientRect(), dpr=Math.min(2,devicePixelRatio||1);
+    W=r.width;H=r.height;c.width=W*dpr;c.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+    dust=[];for(let i=0;i<70;i++)dust.push({x:Math.random()*W,y:Math.random()*H*.8,r:Math.random()*1+.3,p:Math.random()*6}); }
+  function star(x,y,r,a){
+    const g=ctx.createRadialGradient(x,y,0,x,y,r*4); g.addColorStop(0,`rgba(255,246,210,${a})`); g.addColorStop(1,"rgba(255,246,210,0)");
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r*4,0,7); ctx.fill();
+    ctx.fillStyle=`rgba(255,252,236,${a})`; ctx.beginPath();
+    for(let i=0;i<8;i++){const ang=i*Math.PI/4, rr=i%2?r*.35:r*1.6; ctx.lineTo(x+Math.cos(ang)*rr,y+Math.sin(ang)*rr)} ctx.closePath(); ctx.fill();
+  }
+  function draw(t){
+    t=t||0; ctx.clearRect(0,0,W,H);
+    dust.forEach(d=>{ctx.fillStyle=`rgba(255,255,255,${.25+.25*Math.sin(t/900+d.p)})`;ctx.beginPath();ctx.arc(d.x,d.y,d.r,0,7);ctx.fill()});
+    const now=performance.now();
+    dreams.forEach(d=>{
+      const x=W*(.46+.5*hash(d.id+"x")), y=H*(.34+.4*hash(d.id+"y"));
+      if(d.done){ let k=1; if(born[d.id]){k=Math.min(1,(now-born[d.id])/900)}
+        const tw=still?1:.85+.15*Math.sin(t/700+hash(d.id)*9);
+        star(x,y,(2.2+2*hash(d.id+"s"))*(.3+.7*k)*(1+(1-k)*1.5),tw*k);
+      } else { ctx.fillStyle="rgba(255,255,255,.35)"; ctx.beginPath(); ctx.arc(x,y,1.1,0,7); ctx.fill(); }
+    });
+  }
+  function loop(t){ draw(t); raf=requestAnimationFrame(loop); }
+  function update(list){
+    const prev=new Set(dreams.filter(d=>d.done).map(d=>d.id));
+    list.forEach(d=>{ if(d.done && dreams.length && !prev.has(d.id)) born[d.id]=performance.now(); });
+    dreams=list.map(d=>({id:d.id,done:!!d.done}));
+    if(still) draw(0);
+  }
+  addEventListener("resize",()=>{size();draw(performance.now())});
+  size(); if(still) draw(0); else raf=requestAnimationFrame(loop);
+  return {update,draw:()=>draw(performance.now())};
+})();
+</script>
+<script>
+const GENRES=["仕事・学び","健康・美容","旅行","趣味・遊び","家族・人間関係","お金・暮らし","心・生き方","その他"];
+const TERMS=[{k:"1y",l:"1年以内"},{k:"3y",l:"3年以内"},{k:"10y",l:"10年以内"},{k:"someday",l:"いつか"}];
+const THEMES=[{k:"asahi",l:"朝日"},{k:"shinryoku",l:"新緑"},{k:"yuyake",l:"夕焼け"},{k:"sakura",l:"桜"},{k:"aozora",l:"青空"}];
+const SUGGEST=["富士山に登る","海外でミュージカルを観る","資格をひとつ取る","家族旅行に行く","フルマラソンを走る","本を出版する"];
+const MAX=100;
+const termLabel=k=>(TERMS.find(t=>t.k===k)||TERMS[3]).l;
+const termIdx=k=>Math.max(0,TERMS.findIndex(t=>t.k===k));
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const ls={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+
+/* ---------- state ---------- */
+let me={name:"",dreams:[]};
+let lists=[];                 // public docs of everyone
+let mode="demo";              // demo | cloud
+let fbUser=null, fdb=null, auth=null, loaded=false;
+const ui={tab:"mine",sort:ls.get("dl.sort")||"added",term:ls.get("dl.term")||"all",group:ls.get("dl.group")||"none",allF:"all",editing:null,confirmDel:null};
+
+/* ---------- storage ---------- */
+const CONFIGURED = typeof firebase!=="undefined" && firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith("ここ");
+if(CONFIGURED){
+  try{
+    firebase.initializeApp(firebaseConfig);
+    auth=firebase.auth(); fdb=firebase.firestore(); mode="cloud";
+  }catch(e){ mode="demo"; }
+}
+
+function publicView(){
+  const dreams=me.dreams.filter(d=>!d.secret).map(d=>({id:d.id,text:d.text,genre:d.genre,term:d.term,done:!!d.done,doneAt:d.doneAt||0,createdAt:d.createdAt}));
+  return {name:me.name||"ゆめびと",total:me.dreams.length,done:me.dreams.filter(d=>d.done).length,dreams,updatedAt:Date.now()};
+}
+let chain=Promise.resolve();
+function save(){
+  render();
+  if(mode==="demo"){
+    ls.set("dl.demo",JSON.stringify(me));
+    const pub=publicView(); lists=[{id:"demo-me",...pub},...lists.filter(l=>l.id!=="demo-me")]; render(); return;
+  }
+  if(!fbUser) return;
+  const uid=fbUser.uid, priv={name:me.name,dreams:me.dreams,updatedAt:Date.now()}, pub=publicView();
+  setStatus("保存中…");
+  chain=chain.then(async()=>{
+    await fdb.collection("users").doc(uid).set(priv);
+    await fdb.collection("public").doc(uid).set(pub);
+    setStatus(cloudStatus());
+  }).catch(e=>{ setStatus("保存できませんでした。通信状態を確認してください（"+esc(e.code||e.message)+"）"); });
+}
+
+/* ---------- actions ---------- */
+function newId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+function addDream(text,genre,term,secret){
+  text=text.trim(); if(!text) return;
+  if(me.dreams.length>=MAX){toast("夢は100個までです");return}
+  me.dreams.push({id:newId(),text,genre,term,secret,done:false,doneAt:0,createdAt:Date.now()});
+  save();
+}
+function toggleDone(id){
+  const d=me.dreams.find(x=>x.id===id); if(!d) return;
+  d.done=!d.done; d.doneAt=d.done?Date.now():0;
+  if(d.done){ toast("おめでとう！ 星がひとつ灯りました"); }
+  save();
+}
+function removeDream(id){ me.dreams=me.dreams.filter(x=>x.id!==id); ui.confirmDel=null; save(); }
+
+/* ---------- render ---------- */
+function canEditMine(){ return mode==="demo" || (!!fbUser && loaded); }
+
+function renderAccount(){
+  const el=$("account");
+  if(mode==="demo"){ el.innerHTML=`<span class="who">お試しモード（この端末にだけ保存）</span>`; return; }
+  if(!fbUser){ el.innerHTML=`<span class="who">ログインすると自分の夢リストを作れます</span><button class="primary" id="loginBtn" style="margin-left:0">Googleでログイン</button>`; return; }
+  el.innerHTML=`<span class="who"><strong>${esc(me.name||"ゆめびと")}</strong> さんの夢リスト</span>
+    <button class="linkbtn" id="renameBtn">名前を変える</button><button class="linkbtn" id="logoutBtn">ログアウト</button>`;
+}
+
+function sorted(){
+  let a=me.dreams.slice();
+  if(ui.term!=="all") a=a.filter(d=>d.term===ui.term);
+  const by={added:(x,y)=>x.createdAt-y.createdAt,
+    doneLast:(x,y)=>(x.done-y.done)||(x.createdAt-y.createdAt),
+    genre:(x,y)=>(GENRES.indexOf(x.genre)-GENRES.indexOf(y.genre))||(x.createdAt-y.createdAt),
+    term:(x,y)=>(termIdx(x.term)-termIdx(y.term))||(x.createdAt-y.createdAt)}[ui.sort];
+  return a.sort(by);
+}
+function itemHTML(d,n){
+  if(ui.editing===d.id){
+    return `<div class="item"><span class="num">${n}</span><div class="body edit">
+      <input id="e-text" value="${esc(d.text)}" maxlength="80">
+      <div class="row"><select id="e-genre">${GENRES.map(g=>`<option ${g===d.genre?"selected":""}>${g}</option>`).join("")}</select>
+      <select id="e-term">${TERMS.map(t=>`<option value="${t.k}" ${t.k===d.term?"selected":""}>${t.l}</option>`).join("")}</select>
+      <label class="check"><input type="checkbox" id="e-secret" ${d.secret?"checked":""}>自分だけに表示</label></div>
+      <div class="row"><button class="icon" data-act="cancel">やめる</button><button class="primary" data-act="saveEdit" data-id="${d.id}">保存</button></div>
+    </div><span></span></div>`;
+  }
+  const del = ui.confirmDel===d.id
+    ? `<button class="icon danger" data-act="del" data-id="${d.id}">本当に削除</button><button class="icon" data-act="cancel">戻る</button>`
+    : `<button class="icon" data-act="edit" data-id="${d.id}" aria-label="編集">編集</button><button class="icon" data-act="askDel" data-id="${d.id}" aria-label="削除">削除</button>`;
+  return `<div class="item ${d.done?"done":""}">
+    <button class="num" data-act="toggle" data-id="${d.id}" aria-pressed="${d.done}" aria-label="${d.done?"達成を取り消す":"達成にする"}">${d.done?"★":n}</button>
+    <div class="body"><div class="text">${esc(d.text)}</div>
+      <div class="meta"><span class="chip">${esc(d.genre)}</span><span class="chip">${termLabel(d.term)}</span>${d.secret?'<span class="chip">非公開</span>':""}${d.done?'<span class="chip star">叶った！</span>':""}</div></div>
+    <div class="actions">${del}</div></div>`;
+}
+function renderMine(){
+  const box=$("mineBody");
+  if(mode==="cloud" && !fbUser){
+    box.innerHTML=`<div class="empty"><div class="big">あなたの夢を、星にしよう</div>Googleでログインすると、夢を100個まで書けます。<br>スマホでもパソコンでも同じリストが見られます。</div>`; return;
+  }
+  if(!canEditMine()){ box.innerHTML=`<div class="empty">読み込み中…</div>`; return; }
+  const full=me.dreams.length>=MAX;
+  let html=`<form class="add" id="addForm">
+    <input type="text" id="dreamText" maxlength="80" placeholder="叶えたい夢を書いてみよう" autocomplete="off" ${full?"disabled":""}>
+    <div class="row">
+      <select id="genre" aria-label="ジャンル">${GENRES.map(g=>`<option>${g}</option>`).join("")}</select>
+      <select id="term" aria-label="期限">${TERMS.map(t=>`<option value="${t.k}">${t.l}</option>`).join("")}</select>
+      <label class="check"><input type="checkbox" id="secret">自分だけに表示</label>
+      <button class="primary" type="submit" ${full?"disabled":""}>＋ 夢を追加</button>
+    </div>
+    ${me.dreams.length<3?`<div class="suggest">${SUGGEST.map(s=>`<button type="button" data-sug="${esc(s)}">${esc(s)}</button>`).join("")}</div>`:""}
+  </form>`;
+  if(me.dreams.length){
+    html+=`<div class="controls" style="margin-top:14px">
+      <label>並べ替え<select id="sortSel">
+        <option value="added">追加順</option><option value="doneLast">達成を下に</option><option value="genre">ジャンル順</option><option value="term">期限が近い順</option></select></label>
+      <label>期限<select id="termSel"><option value="all">すべて</option>${TERMS.map(t=>`<option value="${t.k}">${t.l}</option>`).join("")}</select></label>
+      <label>分けて表示<select id="groupSel"><option value="none">しない</option><option value="term">期限ごと</option><option value="genre">ジャンルごと</option></select></label>
+    </div>`;
+    const order=new Map(me.dreams.slice().sort((a,b)=>a.createdAt-b.createdAt).map((d,i)=>[d.id,i+1]));
+    const items=sorted();
+    html+=`<div style="margin-top:10px">`;
+    if(!items.length) html+=`<div class="empty">この期限の夢はまだありません</div>`;
+    else if(ui.group==="none") html+=`<div class="list">${items.map(d=>itemHTML(d,order.get(d.id))).join("")}</div>`;
+    else{
+      const keys=ui.group==="term"?TERMS.map(t=>t.k):GENRES;
+      keys.forEach(k=>{const g=items.filter(d=>(ui.group==="term"?d.term:d.genre)===k); if(!g.length) return;
+        html+=`<div class="group-title">${ui.group==="term"?termLabel(k):esc(k)}（${g.length}）</div><div class="list">${g.map(d=>itemHTML(d,order.get(d.id))).join("")}</div>`;});
+    }
+    html+=`</div>`;
+  }else{
+    html+=`<div class="empty" style="margin-top:14px"><div class="big">最初の夢を書いてみよう</div>小さな夢でも大丈夫。叶ったら番号をタップすると、空に星が灯ります。</div>`;
+  }
+  box.innerHTML=html;
+  const s=$("sortSel"); if(s){s.value=ui.sort; $("termSel").value=ui.term; $("groupSel").value=ui.group;}
+}
+function renderAll(){
+  const myId=fbUser?fbUser.uid:"demo-me";
+  let feed=[];
+  lists.forEach(l=>(l.dreams||[]).forEach(d=>feed.push({...d,owner:l.name||"ゆめびと",mine:l.id===myId})));
+  if(ui.allF==="done") feed=feed.filter(d=>d.done);
+  if(ui.allF==="open") feed=feed.filter(d=>!d.done);
+  feed.sort((a,b)=>Math.max(b.doneAt||0,b.createdAt||0)-Math.max(a.doneAt||0,a.createdAt||0));
+  feed=feed.slice(0,200);
+  $("allList").innerHTML=feed.length?feed.map(d=>`<div class="item ${d.done?"done":""}"><span class="dot">${d.done?"★":"☆"}</span>
+    <div class="body"><div class="text">${esc(d.text)}</div><div class="meta"><span class="owner">${esc(d.owner)}${d.mine?"（あなた）":""}</span><span class="chip">${esc(d.genre)}</span><span class="chip">${termLabel(d.term)}</span>${d.done?'<span class="chip star">叶った！</span>':""}</div></div></div>`).join("")
+    :`<div class="empty"><div class="big">まだ夢が届いていません</div>みんなが書いた夢がここに並びます。</div>`;
+  document.querySelectorAll("#allFilter button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.f===ui.allF));
+}
+function renderRank(){
+  const myId=fbUser?fbUser.uid:"demo-me";
+  const r=lists.filter(l=>(l.total||0)>0).sort((a,b)=>(b.done-a.done)||(b.total-a.total));
+  let prev=null,pos=0;
+  $("rankList").innerHTML=r.length?r.slice(0,100).map((l,i)=>{ if(l.done!==prev){pos=i+1;prev=l.done}
+    return `<div class="rank ${pos<=3&&l.done>0?"top":""}"><div class="pos">${pos}</div>
+    <div class="name">${esc(l.name||"ゆめびと")}${l.id===myId?'<span class="you">あなた</span>':""}</div>
+    <div class="score"><b>${l.done}</b> 叶った<br>${l.total} 個中</div></div>`}).join("")
+    :`<div class="empty"><div class="big">ランキングはまだ空です</div>夢を叶えた数の多い順に並びます。</div>`;
+}
+function renderThemes(){
+  const cur=$("app").dataset.palette;
+  const sw={asahi:"linear-gradient(135deg,#6b3b6e,#e9876a)",shinryoku:"linear-gradient(135deg,#1d4a44,#5f9a6a)",yuyake:"linear-gradient(135deg,#5b2747,#d4573b)",sakura:"linear-gradient(135deg,#6a3667,#d98aa8)",aozora:"linear-gradient(135deg,#1d3f7a,#4f8fd0)"};
+  $("themes").innerHTML=`<span>テーマ</span>`+THEMES.map(t=>`<button class="swatch" data-theme="${t.k}" aria-pressed="${t.k===cur}"><i style="background:${sw[t.k]}"></i>${t.l}</button>`).join("");
+}
+function cloudStatus(){ return "クラウド保存中 · どの端末からでも同じリストが見られます"; }
+function setStatus(t){ $("status").textContent=t; }
+function render(){
+  const done=me.dreams.filter(d=>d.done).length;
+  $("doneN").textContent=done; $("bar").style.width=(done/MAX*100)+"%";
+  ["mine","all","rank"].forEach(t=>{ $("p-"+t).hidden=ui.tab!==t; $("t-"+t).setAttribute("aria-selected",ui.tab===t); });
+  renderAccount(); renderMine(); renderAll(); renderRank(); renderThemes();
+  sky.update(me.dreams);
+}
+let toastT; function toast(m){ const t=$("toast"); t.textContent=m; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true,2400); }
+
+/* ---------- events ---------- */
+document.addEventListener("click",e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  if(b.dataset.tab){ ui.tab=b.dataset.tab; render(); return; }
+  if(b.dataset.f){ ui.allF=b.dataset.f; renderAll(); return; }
+  if(b.dataset.theme){ $("app").dataset.palette=b.dataset.theme; ls.set("dl.theme",b.dataset.theme); renderThemes(); sky.draw(); return; }
+  if(b.dataset.sug){ $("dreamText").value=b.dataset.sug; $("dreamText").focus(); return; }
+  if(b.id==="loginBtn") return login();
+  if(b.id==="logoutBtn") return auth.signOut();
+  if(b.id==="renameBtn") return openName();
+  if(b.id==="nameCancel"){ $("nameSheet").hidden=true; return; }
+  const id=b.dataset.id;
+  switch(b.dataset.act){
+    case "toggle": toggleDone(id); break;
+    case "edit": ui.editing=id; ui.confirmDel=null; renderMine(); setTimeout(()=>$("e-text")?.focus(),0); break;
+    case "askDel": ui.confirmDel=id; ui.editing=null; renderMine(); break;
+    case "del": removeDream(id); break;
+    case "cancel": ui.editing=null; ui.confirmDel=null; renderMine(); break;
+    case "saveEdit": {
+      const d=me.dreams.find(x=>x.id===id); const t=$("e-text").value.trim();
+      if(d&&t){ d.text=t; d.genre=$("e-genre").value; d.term=$("e-term").value; d.secret=$("e-secret").checked; }
+      ui.editing=null; save(); break; }
+  }
+});
+document.addEventListener("submit",e=>{
+  e.preventDefault();
+  if(e.target.id==="addForm"){ addDream($("dreamText").value,$("genre").value,$("term").value,$("secret").checked); setTimeout(()=>$("dreamText")?.focus(),0); }
+  if(e.target.id==="nameForm"){ const n=$("nameInput").value.trim().slice(0,20); if(n){ me.name=n; $("nameSheet").hidden=true; save(); } }
+});
+document.addEventListener("change",e=>{
+  const t=e.target;
+  if(t.id==="sortSel"){ui.sort=t.value;ls.set("dl.sort",t.value);renderMine()}
+  if(t.id==="termSel"){ui.term=t.value;ls.set("dl.term",t.value);renderMine()}
+  if(t.id==="groupSel"){ui.group=t.value;ls.set("dl.group",t.value);renderMine()}
+});
+function openName(){ $("nameInput").value=me.name||""; $("nameSheet").hidden=false; setTimeout(()=>$("nameInput").focus(),0); }
+
+/* ---------- auth ---------- */
+const inApp=/Instagram|FBAN|FBAV|Line\/|Threads/i.test(navigator.userAgent);
+function login(){
+  if(inApp){ showNotice(`<strong>アプリ内ブラウザではログインできません。</strong> 右上（または右下）のメニューから「ブラウザで開く」を選んで、SafariやChromeで開いてください。`); return; }
+  const p=new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(p).catch(err=>{
+    if(err.code==="auth/popup-blocked"||err.code==="auth/operation-not-supported-in-this-environment") auth.signInWithRedirect(p);
+    else if(err.code!=="auth/popup-closed-by-user"&&err.code!=="auth/cancelled-popup-request") toast("ログインできませんでした（"+err.code+"）");
+  });
+}
+function showNotice(h){ const n=$("notice"); n.innerHTML=h; n.hidden=false; }
+
+/* ---------- boot ---------- */
+(function boot(){
+  const th=ls.get("dl.theme"); if(th&&THEMES.some(t=>t.k===th)) $("app").dataset.palette=th;
+  if(mode==="demo"){
+    try{ const d=JSON.parse(ls.get("dl.demo")||"null"); if(d&&Array.isArray(d.dreams)) me=d; }catch(e){}
+    lists=[{id:"demo-me",...publicView()}];
+    setStatus("お試しモード：Firebaseを設定すると、みんなで使えるようになります");
+    showNotice(`<strong>お試しモードで表示中です。</strong> 夢はこの端末のブラウザにだけ保存されます。`);
+    render(); return;
+  }
+  setStatus("接続中…");
+  if(inApp) showNotice(`Instagramなどのアプリ内で開いています。ログインするときは、メニューから「ブラウザで開く」を選んでください。`);
+  fdb.collection("public").orderBy("done","desc").limit(300).onSnapshot(s=>{
+    lists=s.docs.map(d=>({id:d.id,...d.data()})); renderAll(); renderRank(); setStatus(cloudStatus());
+  },err=>setStatus("みんなの夢を読み込めませんでした（"+err.code+"）"));
+  let unsub=null;
+  auth.getRedirectResult().catch(()=>{});
+  auth.onAuthStateChanged(u=>{
+    fbUser=u; loaded=false; if(unsub){unsub();unsub=null}
+    if(!u){ me={name:"",dreams:[]}; render(); return; }
+    render();
+    unsub=fdb.collection("users").doc(u.uid).onSnapshot(s=>{
+      const first=!loaded; loaded=true;
+      if(s.exists){ const d=s.data(); me={name:d.name||"",dreams:Array.isArray(d.dreams)?d.dreams:[]}; }
+      else if(first){ me={name:"",dreams:[]}; }
+      if(first && !me.name) openName();
+      if(!ui.editing) render(); else { renderAll(); renderRank(); }
+    },err=>setStatus("読み込めませんでした（"+err.code+"）"));
+  });
+  render();
+})();
+</script>
+</body>
+</html>
